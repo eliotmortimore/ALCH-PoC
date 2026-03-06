@@ -119,9 +119,13 @@ const BoxMesh = ({
 }) => {
   const worldX = -DRAWER_WIDTH / 2 + data.x * CELL_SIZE + (data.w * CELL_SIZE) / 2;
   const worldZ = -DRAWER_DEPTH / 2 + data.y * CELL_SIZE + (data.h * CELL_SIZE) / 2;
-  const height = 3; // Taller for container look
+  const height = 3; 
   const wallThickness = 0.2;
   const floorThickness = 0.2;
+  // Box base height to clear the grid (Grid height is 0.5, so we need y > 0.5)
+  // Let's set base y to 0.55
+  const bottomOffset = 0.6;
+  
   const width = data.w * CELL_SIZE - 0.2;
   const depth = data.h * CELL_SIZE - 0.2;
 
@@ -131,6 +135,10 @@ const BoxMesh = ({
   const bind = useDrag(
     ({ active, xy: [x, y], event, memo, tap }) => {
       if (isGhost) return;
+      
+      // Stop propagation to prevent Plane interactions (like deselection)
+      if (event && event.stopPropagation) event.stopPropagation();
+
       if (tap && onClick) {
          onClick(event as any);
          return;
@@ -197,7 +205,7 @@ const BoxMesh = ({
   const lineMaterial = new THREE.LineBasicMaterial({ color: "black", transparent: isGhost, opacity: isGhost ? 0.3 : 1 });
 
   return (
-    <group position={[worldX, 0, worldZ]} {...(isGhost ? {} : bind()) as any}>
+    <group position={[worldX, bottomOffset, worldZ]} {...(isGhost ? {} : bind()) as any}>
       {/* --- Container Geometry Group --- */}
       
       {/* Floor */}
