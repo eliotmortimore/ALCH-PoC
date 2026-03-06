@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { Canvas, useThree, ThreeEvent } from "@react-three/fiber";
-import { OrbitControls, Grid, Environment, Html } from "@react-three/drei";
+import { OrbitControls, Grid, Environment, Html, Text } from "@react-three/drei";
 import * as THREE from "three";
 import { Box as BoxIcon, Trash2, Copy, Grid3X3, RotateCw, Hand } from "lucide-react";
 import { useDrag } from "@use-gesture/react";
@@ -55,6 +55,46 @@ const isWithinBounds = (
 ) => {
   return x >= 0 && y >= 0 && x + w <= cols && y + h <= rows;
 };
+
+const GridBase = () => {
+  // Create 3D waffle grid
+  // Just lines of meshes
+  const thickness = 0.1;
+  const height = 0.5; // Slightly raised
+  const color = "#fca5a5"; // Light reddish/salmon
+  
+  const verticalLines = [];
+  for(let i=0; i<=GRID_COLS; i++) {
+      verticalLines.push(
+          <mesh key={`v-${i}`} position={[-DRAWER_WIDTH/2 + i*CELL_SIZE, height/2, 0]} receiveShadow>
+              <boxGeometry args={[thickness, height, DRAWER_DEPTH]} />
+              <meshToonMaterial color={color} />
+          </mesh>
+      )
+  }
+  
+  const horizontalLines = [];
+  for(let i=0; i<=GRID_ROWS; i++) {
+      horizontalLines.push(
+          <mesh key={`h-${i}`} position={[0, height/2, -DRAWER_DEPTH/2 + i*CELL_SIZE]} receiveShadow>
+              <boxGeometry args={[DRAWER_WIDTH, height, thickness]} />
+              <meshToonMaterial color={color} />
+          </mesh>
+      )
+  }
+
+  return (
+      <group position={[0, 0.01, 0]}>
+          {verticalLines}
+          {horizontalLines}
+          {/* Base Plate */}
+          <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+              <planeGeometry args={[DRAWER_WIDTH, DRAWER_DEPTH]} />
+              <meshToonMaterial color="#fff1f2" /> 
+          </mesh>
+      </group>
+  )
+}
 
 // --- Components ---
 
@@ -617,18 +657,21 @@ export default function ModuBox() {
 
           <group position={[0, 0, 0]}>
             <DrawerPlane onHover={handlePlaneHover} onClick={handlePlaneClick} />
-            <Grid
-              position={[0, 0.01, 0]}
-              args={[DRAWER_WIDTH, DRAWER_DEPTH]}
-              cellSize={CELL_SIZE}
-              cellThickness={0.5}
-              cellColor="#d1d5db" // Light gray grid
-              sectionSize={CELL_SIZE * 4}
-              sectionThickness={1}
-              sectionColor="#9ca3af"
-              fadeDistance={60}
-              infiniteGrid={false}
-            />
+            <GridBase />
+            
+            {/* Floor Label */}
+            <group position={[0, 0.05, DRAWER_DEPTH/2 + 4]}>
+                <Text 
+                    rotation={[-Math.PI/2, 0, 0]} 
+                    fontSize={2} 
+                    color="#e5e7eb"
+                    anchorX="center"
+                    anchorY="middle"
+                    fontWeight="bold"
+                >
+                    FRONT
+                </Text>
+            </group>
             
             {/* Drawer Borders - Simplified for clean look */}
              <mesh position={[0, 1.5, -DRAWER_DEPTH/2 - 0.2]} receiveShadow>
