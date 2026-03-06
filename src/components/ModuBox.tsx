@@ -133,17 +133,12 @@ const BoxMesh = ({
   const { camera, raycaster, size, gl } = useThree();
 
   const bind = useDrag(
-    ({ active, xy: [x, y], event, memo, tap }) => {
+    ({ active, xy: [x, y], event, memo }) => {
       if (isGhost) return;
       
       // Stop propagation to prevent Plane interactions (like deselection)
       if (event && event.stopPropagation) event.stopPropagation();
 
-      if (tap && onClick) {
-         onClick(event as any);
-         return;
-      }
-      
       if (active) {
           // Raycast from mouse position to infinite plane y=0
           // Convert screen coordinates (x, y) to normalized device coordinates (-1 to +1)
@@ -189,23 +184,35 @@ const BoxMesh = ({
           if (onDragEnd) onDragEnd();
       }
     },
-    { filterTaps: true }
+    { threshold: 10 }
   );
 
   // Materials
+  // Determine if we should show the "error/ghost" style
+  // It applies if it IS a ghost, OR if it's a real box that is invalid (colliding)
+  const isErrorStyle = isGhost || !isValid;
+  
   const materialProps = {
-    color: isGhost ? (isValid ? "#22c55e" : "#ef4444") : data.color,
-    transparent: isGhost,
-    opacity: isGhost ? 0.6 : 1,
+    color: isErrorStyle ? (isValid ? "#22c55e" : "#ef4444") : data.color,
+    transparent: isErrorStyle,
+    opacity: isErrorStyle ? 0.6 : 1,
     emissive: isSelected ? "#ffffff" : "#000000",
     emissiveIntensity: isSelected ? 0.2 : 0,
     toneMapped: false, // Key for flat toon look
   };
 
-  const lineMaterial = new THREE.LineBasicMaterial({ color: "black", transparent: isGhost, opacity: isGhost ? 0.3 : 1 });
+  const lineMaterial = new THREE.LineBasicMaterial({ color: "black", transparent: isErrorStyle, opacity: isErrorStyle ? 0.3 : 1 });
 
   return (
-    <group position={[worldX, bottomOffset, worldZ]} {...(isGhost ? {} : bind()) as any}>
+    <group 
+      position={[worldX, bottomOffset, worldZ]} 
+      {...(isGhost ? {} : bind()) as any}
+      onClick={(e) => {
+        if (isGhost) return;
+        e.stopPropagation();
+        if (onClick) onClick(e);
+      }}
+    >
       {/* --- Container Geometry Group --- */}
       
       {/* Floor */}
@@ -264,7 +271,7 @@ const BoxMesh = ({
       </mesh>
 
       {/* --- Outlines (Edges) --- */}
-      {!isGhost && (
+      {!isErrorStyle && (
         <>
             {/* Outline logic: Simplified bounding box outline for performance/aesthetic */}
              <lineSegments position={[0, height/2, 0]}>
@@ -481,9 +488,9 @@ export default function ModuBox() {
      const newX = box.x + dx;
      const newY = box.y + dy;
 
-     if(checkPlacement(newX, newY, box.w, box.h, id)) {
-         setBoxes(boxes.map(b => b.id === id ? { ...b, x: newX, y: newY } : b));
-     }
+     // Allow movement regardless of collision to consistent with drag behavior
+     // Visual feedback will show red if invalid
+     setBoxes(boxes.map(b => b.id === id ? { ...b, x: newX, y: newY } : b));
   };
 
   const handleRotateBox = (id: string) => {
@@ -494,15 +501,9 @@ export default function ModuBox() {
      const newW = box.h;
      const newH = box.w;
      
-     // Simple center pivot logic or top-left pivot? 
-     // Let's try to keep center roughly same, but aligned to grid
-     // Actually for simplicity in this grid system, pivoting around top-left (current x,y) is safest 
-     // unless we implement the complex "pivot around clicked cell" logic again. 
-     // Let's stick to simple in-place rotation (top-left anchor) and verify bounds.
-     
-     if(checkPlacement(box.x, box.y, newW, newH, id)) {
-         setBoxes(boxes.map(b => b.id === id ? { ...b, w: newW, h: newH } : b));
-     }
+     // Allow rotation even if invalid (visual feedback handled in render)
+     // Keep the box at current x,y. If it goes out of bounds or overlaps, it will show red.
+     setBoxes(boxes.map(b => b.id === id ? { ...b, w: newW, h: newH } : b));
   };
   
   const handleDeleteBox = (id: string) => {
@@ -716,35 +717,38 @@ export default function ModuBox() {
              </mesh>
 
             {/* Placed Boxes */}
-            {boxes.map((box) => (
-              <React.Fragment key={box.id}>
-                   <BoxMesh
-                     data={box}
-                     isSelected={selectedBoxId === box.id}
-                     onClick={(e) => {
-                         // Selection handled inside BoxMesh via tap
-                         if(!draggedTemplate && !isDraggingBox) setSelectedBoxId(box.id);
-                     }}
-                     onDragStart={() => {
-                         setIsDraggingBox(true);
-                         setSelectedBoxId(box.id); // Auto-select on drag
-                     }}
-                     onDragEnd={() => setIsDraggingBox(false)}
-                     onDrag={(nx, ny) => {
-                         // Direct update for responsiveness
-                         if(checkPlacement(nx, ny, box.w, box.h, box.id)) {
+            {boxes.map((box) => {
+              const isValid = checkPlacement(box.x, box.y, box.w, box.h, box.id);
+              return (
+                  <React.Fragment key={box.id}>
+                       <BoxMesh
+                         data={box}
+                         isValid={isValid}
+                         isSelected={selectedBoxId === box.id}
+                         onClick={(e) => {
+                             // Selection handled inside BoxMesh via tap
+                             if(!draggedTemplate && !isDraggingBox) setSelectedBoxId(box.id);
+                         }}
+                         onDragStart={() => {
+                             setIsDraggingBox(true);
+                             setSelectedBoxId(box.id); // Auto-select on drag
+                         }}
+                         onDragEnd={() => setIsDraggingBox(false)}
+                         onDrag={(nx, ny) => {
+                             // Allow movement regardless of validity so user can drag OUT of collision
+                             // The visual feedback (red) is handled by the render loop
                              setBoxes(prev => prev.map(b => b.id === box.id ? {...b, x: nx, y: ny} : b));
-                         }
-                     }}
-                   />
-                  {selectedBoxId === box.id && (
-                      <TransformGizmo 
-                        box={box} 
-                        onMove={(dx, dy) => handleMoveBox(box.id, dx, dy)}
-                      />
-                  )}
-              </React.Fragment>
-            ))}
+                         }}
+                       />
+                      {selectedBoxId === box.id && (
+                          <TransformGizmo 
+                            box={box} 
+                            onMove={(dx, dy) => handleMoveBox(box.id, dx, dy)}
+                          />
+                      )}
+                  </React.Fragment>
+              );
+            })}
 
             {/* Ghost Template */}
             {draggedTemplate && hoverPos && (
